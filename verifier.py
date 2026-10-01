@@ -164,7 +164,7 @@ def verifier_fournisseurs() -> None:
         echec("aucun fournisseur de mesure",
               "Ajoutez FOURNISSEUR_MESURE : un fournisseur sans quota "
               "journalier annonce, ou mesure.py epuisera votre principal "
-              "(annexe C, §7).")
+              "(annexe C, section 7).")
 
     # Le secours doit servir le meme modele que le principal : une bascule au
     # milieu d'une execution ne doit pas changer le comportement de l'agent.
@@ -177,14 +177,14 @@ def verifier_fournisseurs() -> None:
             alerte(f"le secours ({secours}) ne sert pas le meme modele que le "
                    f"principal ({principal})",
                    "Une bascule changera le comportement de l'agent au milieu "
-                   "d'une execution. L'annexe C, §7, donne un secours qui sert "
+                   "d'une execution. L'annexe C, section 7, donne un secours qui sert "
                    "le meme modele.")
     # Le fournisseur de grande fenetre, appele par son nom au TP2 et pour le
     # moteur A du TP1 bis. Il n'est pas exige avant le bloc 1.5.
     fenetre = os.environ.get("FOURNISSEUR_GRANDE_FENETRE")
     if not fenetre:
         alerte("aucun FOURNISSEUR_GRANDE_FENETRE dans .env",
-               "Le TP2 et le moteur A du TP1 bis en ont besoin (annexe C, §7). "
+               "Le TP2 et le moteur A du TP1 bis en ont besoin (annexe C, section 7). "
                "Ajoutez-le avant le bloc 1.5.")
 
     noms = []
@@ -196,7 +196,7 @@ def verifier_fournisseurs() -> None:
         variable = f"LLM_{nom.upper().replace('-', '_')}_CLE"
         if os.environ.get(variable, "").strip() in ("", "..."):
             remede = (f"Collez votre cle dans .env, a la ligne {variable}=, a la place "
-                      f"des trois points. Le compte se cree en suivant l'annexe C, §7.")
+                      f"des trois points. Le compte se cree en suivant l'annexe C, section 7.")
             # La grande fenetre ne sert qu'a partir du bloc 1.5 : elle previent
             # sans bloquer.
             if nom == fenetre and nom not in (principal, secours, mesure):
