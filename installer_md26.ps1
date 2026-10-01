@@ -143,7 +143,10 @@ if (-not $fait) { Arret "Les bibliotheques ne se sont pas installees." }
 # PowerShell refuse sinon d'activer l'environnement virtuel (partie R3).
 $politique = Get-ExecutionPolicy -Scope CurrentUser
 if ($politique -eq "Undefined" -or $politique -eq "Restricted") {
-    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+    # Ce script tourne lui-meme en mode Bypass : PowerShell previent alors que
+    # le reglage ne vaut qu'apres. L'avertissement n'est pas une erreur.
+    try { Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction Stop }
+    catch { }
 }
 Ok "environnement pret : .venv\Scripts\activate pour l'activer"
 

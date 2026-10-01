@@ -193,6 +193,12 @@ def verifier_fournisseurs() -> None:
             noms.append(nom)
 
     for nom in noms:
+        variable = f"LLM_{nom.upper().replace('-', '_')}_CLE"
+        if os.environ.get(variable, "").strip() in ("", "..."):
+            echec(f"{nom} : pas de cle",
+                  f"Collez votre cle dans .env, a la ligne {variable}=, a la place "
+                  f"des trois points. Le compte se cree en suivant l'annexe C, §7.")
+            continue
         try:
             client = Client(fournisseur=nom, journal=None)
             reponse = client.appeler(
@@ -207,8 +213,14 @@ def verifier_fournisseurs() -> None:
         except ErreurFournisseur as erreur:
             echec(f"{nom} : {erreur}", "Verifiez la cle et l'URL dans .env.")
         except Exception as erreur:                          # noqa: BLE001
-            echec(f"{nom} : {type(erreur).__name__} {erreur}",
-                  "Etes-vous sur le reseau MD26 ?")
+            texte = str(erreur)
+            # Une cle refusee n'est pas une panne de reseau : le remede differe.
+            if any(code in texte for code in ("401", "403", "400 ")):
+                remede = (f"La cle est refusee. Recopiez-la dans .env, a la ligne "
+                          f"{variable}=, sans espace. Reessayer sans la changer ne sert a rien.")
+            else:
+                remede = "Etes-vous sur le reseau MD26 ? Sinon, le fournisseur est peut-etre en panne."
+            echec(f"{nom} : {type(erreur).__name__} {texte[:200]}", remede)
 
 
 def verifier_hors_ligne() -> None:
