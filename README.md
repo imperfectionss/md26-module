@@ -27,7 +27,8 @@ TP. Le polycopié, partie R3, explique chaque étape.
 | `.env.exemple` | Le modèle de votre `.env`, qui ne part jamais ici |
 | `installer_md26.ps1`, `installer_md26.sh` | L'installation du poste, à lire avant de la lancer |
 
-Chaque TP a sa branche de départ, `tpN-depart`, publiée ici quand le TP
-commence (polycopié, §R8.4).
+Chaque TP a sa branche de départ, `tpN-depart`, publiée ici le jour de sa
+séance. À partir du TP1 bis, elle contient l'agent corrigé du TP précédent, le
+même pour tous (polycopié, §R8.4).
 
 Prof. Youssef FAKIR · FST Mohammedia · yousseff.fakirr@gmail.com
