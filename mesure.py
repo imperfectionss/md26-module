@@ -518,6 +518,12 @@ def afficher(resultat: Resultat, nom_agent: str, nom_taches: str,
         print(f"  cout par resolution  {par_resolution:.4f} $"
               f"   echecs compris")
     print(f"  latence mediane      {resultat.latence_mediane():.1f} s")
+    envoyes = sum(e.tokens_entree for e in v)
+    caches = sum(e.tokens_caches for e in v)
+    if caches:
+        # Le prompt caching se lit dans la reponse de l'API, il ne se suppose pas (§5.9.4).
+        print(f"  tokens lus en cache  {caches} sur {envoyes} envoyes"
+              f" ({caches / envoyes * 100:.0f} %)")
     if resultat.actions_non_sures():
         print(f"  actions non sures    {resultat.actions_non_sures()}")
     print()
@@ -585,6 +591,8 @@ def en_json(resultat: Resultat, nom_agent: str, options: dict,
         "cout_total": round(resultat.cout_total(), 6),
         "cout_par_resolution": None if par_resolution is None else round(par_resolution, 6),
         "latence_mediane": round(resultat.latence_mediane(), 3),
+        "tokens_entree": sum(e.tokens_entree for e in resultat.valides),
+        "tokens_caches": sum(e.tokens_caches for e in resultat.valides),
         "actions_non_sures": resultat.actions_non_sures(),
         "arena": resultat.arena(),
         "avertissements": resultat.avertissements(),
