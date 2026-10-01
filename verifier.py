@@ -195,9 +195,14 @@ def verifier_fournisseurs() -> None:
     for nom in noms:
         variable = f"LLM_{nom.upper().replace('-', '_')}_CLE"
         if os.environ.get(variable, "").strip() in ("", "..."):
-            echec(f"{nom} : pas de cle",
-                  f"Collez votre cle dans .env, a la ligne {variable}=, a la place "
-                  f"des trois points. Le compte se cree en suivant l'annexe C, §7.")
+            remede = (f"Collez votre cle dans .env, a la ligne {variable}=, a la place "
+                      f"des trois points. Le compte se cree en suivant l'annexe C, §7.")
+            # La grande fenetre ne sert qu'a partir du bloc 1.5 : elle previent
+            # sans bloquer.
+            if nom == fenetre and nom not in (principal, secours, mesure):
+                alerte(f"{nom} : pas encore de cle, il en faut une avant le bloc 1.5", remede)
+            else:
+                echec(f"{nom} : pas de cle", remede)
             continue
         try:
             client = Client(fournisseur=nom, journal=None)
