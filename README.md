@@ -24,6 +24,7 @@ TP. Le polycopié, partie R3, explique chaque étape.
 | `hors_ligne.py` | Capture et rejoue de vraies réponses |
 | `atelier/` | Le workflow n8n et les tickets du TP0 |
 | `observations/` | Les sorties de vos micro-ateliers |
+| `tableaux/` | Les tableaux communs des séances passées, une fois publiés |
 | `.env.exemple` | Le modèle de votre `.env`, qui ne part jamais ici |
 | `installer_md26.ps1`, `installer_md26.sh` | L'installation du poste, à lire avant de la lancer |
 
