@@ -1,0 +1,18 @@
+# Vos cles. Ce fichier ne part jamais sur GitHub.
+.env
+.env.*
+!.env.exemple
+
+# L'environnement virtuel et les fichiers que Python reconstruit
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Les systemes de fichiers
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Le dossier hors_ligne/ n'est PAS ici, et c'est voulu : vos captures s'y
+# commitent, et l'integration continue du TP1 les rejoue.
