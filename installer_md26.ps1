@@ -19,7 +19,7 @@
 
 param(
     [string]$Depot = "",
-    [string]$Miroir = "http://192.168.8.2:8000",
+    [string]$Miroir = "http://192.168.137.1:8000",
     [string]$Module = "https://github.com/imperfectionss/md26-module.git",
     [string]$Dossier = (Join-Path $HOME "md26"),
     [switch]$SansBlocNotes
@@ -135,7 +135,8 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) { & $Python -m venv .venv }
 $VPy = Join-Path $Dossier ".venv\Scripts\python.exe"
 $fait = $false
 if ($EnSalle) {
-    & $VPy -m pip install -q --no-index --trusted-host 192.168.8.2 --find-links="$Miroir/roue/" -r requirements.txt
+    $HoteMiroir = ([uri]$Miroir).Host
+    & $VPy -m pip install -q --no-index --trusted-host $HoteMiroir --find-links="$Miroir/roue/" -r requirements.txt
     $fait = ($LASTEXITCODE -eq 0)
 }
 if (-not $fait) { & $VPy -m pip install -q -r requirements.txt; $fait = ($LASTEXITCODE -eq 0) }
