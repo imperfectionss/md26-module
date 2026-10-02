@@ -13,7 +13,8 @@
 # Lancement :   sh installer_md26.sh
 # ou, avec l'adresse de votre copie :   sh installer_md26.sh https://github.com/...
 
-MIROIR="http://192.168.8.2:8000"
+HOTE_MIROIR="192.168.137.1"
+MIROIR="http://$HOTE_MIROIR:8000"
 MODULE="https://github.com/imperfectionss/md26-module.git"
 DOSSIER="$HOME/md26"
 DEPOT="$1"
@@ -67,7 +68,7 @@ cd "$DOSSIER" || exit 1
 
 etape "3/5  L'environnement virtuel"
 [ -x .venv/bin/python ] || "$PY" -m venv .venv || arret "venv a echoue. Linux : sudo apt install python3-venv."
-if [ "$EN_SALLE" = 1 ] && .venv/bin/python -m pip install -q --no-index --trusted-host 192.168.8.2 \
+if [ "$EN_SALLE" = 1 ] && .venv/bin/python -m pip install -q --no-index --trusted-host "$HOTE_MIROIR" \
      --find-links="$MIROIR/roue/" -r requirements.txt; then
   ok "bibliotheques installees depuis le miroir"
 else

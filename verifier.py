@@ -32,7 +32,7 @@ if os.name == "nt" and not os.environ.get("WT_SESSION"):
 
 PYTHON_MINIMAL = (3, 10)      # mcp (TP4), langgraph (TP8), fastapi (TP3)
 PYTHON_MIROIR = {(3, 13), (3, 14)}   # les versions servies par le miroir de la salle
-MIROIR_SALLE = "http://192.168.8.2:8000"
+MIROIR_SALLE = "http://192.168.137.1:8000"
 
 problemes: list[str] = []
 
