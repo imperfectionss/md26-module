@@ -1,0 +1,33 @@
+# MDT-26 — n8n pour la demonstration du bloc 0 et le TP0
+#
+#   docker compose up -d      demarrer, puis ouvrir http://localhost:5678
+#   docker compose logs -f    voir les journaux
+#   docker compose down       arreter (les donnees restent dans le volume)
+#
+# Edition Community, auto-hebergee, gratuite. Aucune limite d execution.
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: mdt26-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      # Le premier ecran demande de creer un compte proprietaire. Il reste
+      # local, dans le volume n8n_data. La variable qui le supprimait,
+      # N8N_USER_MANAGEMENT_DISABLED, n'existe plus : verifie le 24 septembre
+      # 2026 dans le code de n8n 2.38.7, ou elle n'apparait nulle part.
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - GENERIC_TIMEZONE=Africa/Casablanca
+      - TZ=Africa/Casablanca
+      # Autorise les modules Node dans les noeuds Code, utile au TP0.
+      - NODE_FUNCTION_ALLOW_BUILTIN=*
+    volumes:
+      - n8n_data:/home/node/.n8n
+      # Les fichiers de l atelier sont visibles depuis les noeuds Code.
+      - ./donnees:/data:ro
+
+volumes:
+  n8n_data:

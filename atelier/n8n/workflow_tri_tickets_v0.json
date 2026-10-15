@@ -1,0 +1,186 @@
+{
+  "name": "MDT-26 Bloc 0 - Tri de tickets v0 (déterministe)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "déclencher",
+      "name": "Déclencher",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "id",
+              "value": "TIC-001",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "corps",
+              "value": "Je n'arrive plus a me connecter depuis ce matin.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "réception-du-ticket",
+      "name": "Réception du ticket",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Nœud 3 : extraction des champs.\n// Il lit le corps du ticket et le passe en minuscules.\nconst t = $json;\nreturn { json: { id: t.id, corps: t.corps.toLowerCase(), brut: t.corps } };\n"
+      },
+      "id": "extraction-des-champs",
+      "name": "Extraction des champs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Nœud 4 : filtrage par mots-clés.\n// Les catégories sont essayées dans l'ordre où elles sont écrites ci-dessous,\n// et la première qui trouve un de ses mots dans le texte l'emporte. La boucle\n// s'arrête là.\nconst MOTS = {\"technique\": [\"connecter\", \"connexion\", \"marche plus\", \"panne\", \"erreur\", \"bug\", \"lent\", \"plante\", \"bloque\", \"acces\"], \"facturation\": [\"facture\", \"facturation\", \"prelevement\", \"paiement\", \"rembours\", \"virement\", \"echeance\"], \"commercial\": [\"devis\", \"tarif\", \"abonnement\", \"licence\", \"demonstration\", \"formation\", \"module\"]};\nconst c = $json.corps;\nlet categorie = \"autre\";\nfor (const nom of Object.keys(MOTS)) {\n  if (MOTS[nom].some(m => c.includes(m))) { categorie = nom; break; }\n}\nreturn { json: Object.assign({}, $json, { categorie: categorie }) };\n"
+      },
+      "id": "filtrage-par-mots-clés",
+      "name": "Filtrage par mots-clés",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Nœud 5 : recherche de la réponse type.\nconst REPONSES = {\"technique\": \"Bonjour, notre equipe technique a bien recu votre signalement. Verifiez d'abord que votre navigateur est a jour. Si le probleme persiste, nous revenons vers vous sous 24 h.\", \"facturation\": \"Bonjour, vous retrouvez toutes vos factures dans votre espace client, rubrique Documents. Les prelevements sont effectues le 5 de chaque mois.\", \"commercial\": \"Bonjour, merci de votre interet. Un conseiller vous rappelle sous 48 h pour etudier votre besoin.\", \"autre\": \"Bonjour, pouvez-vous preciser votre demande ? Nous la transmettrons au bon interlocuteur.\"};\nreturn { json: Object.assign({}, $json, { reponse: REPONSES[$json.categorie] }) };\n"
+      },
+      "id": "recherche-de-la-réponse-type",
+      "name": "Recherche de la réponse type",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Nœud 6 : mise en forme du message sortant.\nreturn { json: {\n  ticket: $json.id,\n  categorie: $json.categorie,\n  message: $json.reponse,\n  envoye_le: new Date().toISOString()\n} };\n"
+      },
+      "id": "mise-en-forme",
+      "name": "Mise en forme",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "envoi-simulé",
+      "name": "Envoi (simulé)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Déclencher": {
+      "main": [
+        [
+          {
+            "node": "Réception du ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réception du ticket": {
+      "main": [
+        [
+          {
+            "node": "Extraction des champs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraction des champs": {
+      "main": [
+        [
+          {
+            "node": "Filtrage par mots-clés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrage par mots-clés": {
+      "main": [
+        [
+          {
+            "node": "Recherche de la réponse type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recherche de la réponse type": {
+      "main": [
+        [
+          {
+            "node": "Mise en forme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mise en forme": {
+      "main": [
+        [
+          {
+            "node": "Envoi (simulé)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

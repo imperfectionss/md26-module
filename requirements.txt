@@ -1,0 +1,3 @@
+# Les bibliotheques du depot MD-26. Une seule pour l'instant : les branches
+# de chaque TP ajoutent les leurs, et le miroir de la salle les sert toutes.
+requests==2.34.2

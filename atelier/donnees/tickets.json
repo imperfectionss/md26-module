@@ -1,0 +1,222 @@
+{
+  "_commentaire": "Tickets fictifs. Aucune donnee personnelle reelle n'entre dans ce module. Le champ attendu est la categorie juste : il sert au jumeau Python, il n'est jamais donne au modele.",
+  "decor": "Une PME marocaine vend un logiciel de gestion a des commercants. Une soixantaine de tickets de support par jour. Une personne y passe ses matinees.",
+  "categories": [
+    "technique",
+    "facturation",
+    "commercial",
+    "autre"
+  ],
+  "mots_cles_v0": {
+    "technique": [
+      "connecter",
+      "connexion",
+      "marche plus",
+      "panne",
+      "erreur",
+      "bug",
+      "lent",
+      "plante",
+      "bloque",
+      "acces"
+    ],
+    "facturation": [
+      "facture",
+      "facturation",
+      "prelevement",
+      "paiement",
+      "rembours",
+      "virement",
+      "echeance"
+    ],
+    "commercial": [
+      "devis",
+      "tarif",
+      "abonnement",
+      "licence",
+      "demonstration",
+      "formation",
+      "module"
+    ]
+  },
+  "reponses_types": {
+    "technique": "Bonjour, notre equipe technique a bien recu votre signalement. Verifiez d'abord que votre navigateur est a jour. Si le probleme persiste, nous revenons vers vous sous 24 h.",
+    "facturation": "Bonjour, vous retrouvez toutes vos factures dans votre espace client, rubrique Documents. Les prelevements sont effectues le 5 de chaque mois.",
+    "commercial": "Bonjour, merci de votre interet. Un conseiller vous rappelle sous 48 h pour etudier votre besoin.",
+    "autre": "Bonjour, pouvez-vous preciser votre demande ? Nous la transmettrons au bon interlocuteur."
+  },
+  "travaux_pratiques": [
+    {
+      "id": "TP-01",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "technique",
+      "corps": "Impossible de me connecter, il me dit mot de passe invalide."
+    },
+    {
+      "id": "TP-02",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "facturation",
+      "corps": "Je n'ai pas recu ma facture de fevrier, pouvez-vous me la renvoyer ?"
+    },
+    {
+      "id": "TP-03",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "technique",
+      "corps": "Le logiciel plante quand j'ouvre l'etat des stocks."
+    },
+    {
+      "id": "TP-04",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "commercial",
+      "corps": "Quel est le tarif du module de caisse ?"
+    },
+    {
+      "id": "TP-05",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "technique",
+      "corps": "L'application est tres lente depuis la mise a jour de jeudi."
+    },
+    {
+      "id": "TP-06",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "commercial",
+      "corps": "Pouvez-vous m'envoyer un devis pour trois postes supplementaires ?"
+    },
+    {
+      "id": "TP-14",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "corps": "Tout marche bien, je voulais juste vous dire merci pour hier."
+    },
+    {
+      "id": "TP-20",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "corps": ""
+    },
+    {
+      "id": "TP-21",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "corps": "?????"
+    },
+    {
+      "id": "TP-07",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "facturation",
+      "corps": "Depuis le prelevement de lundi mon acces est bloque."
+    },
+    {
+      "id": "TP-08",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "facturation",
+      "corps": "J'ai ete preleve deux fois et depuis j'ai une erreur au demarrage."
+    },
+    {
+      "id": "TP-09",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "facturation",
+      "corps": "Ma licence est expiree et du coup plus rien ne marche."
+    },
+    {
+      "id": "TP-10",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "commercial",
+      "corps": "Je n'arrive pas a souscrire au module de facturation."
+    },
+    {
+      "id": "TP-11",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "commercial",
+      "corps": "Le logiciel marche tres bien mais je vais arreter, c'est trop cher."
+    },
+    {
+      "id": "TP-12",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "commercial",
+      "corps": "Ma facture est correcte mais je trouve que le service s'est degrade."
+    },
+    {
+      "id": "TP-13",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "commercial",
+      "corps": "Je regle chaque mois une option que je n'utilise jamais, on peut la retirer ?"
+    },
+    {
+      "id": "TP-15",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "commercial",
+      "corps": "Si ce bug n'est pas corrige avant vendredi je resilie."
+    },
+    {
+      "id": "TP-16",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "action_requise": "retrouver l'echange avec le collegue cite",
+      "corps": "Comme convenu avec votre collegue, je vous confirme."
+    },
+    {
+      "id": "TP-17",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "action_requise": "retrouver le ticket precedent du meme client",
+      "corps": "C'est le meme probleme que la derniere fois."
+    },
+    {
+      "id": "TP-18",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "action_requise": "ouvrir le dossier client et lister les pieces manquantes",
+      "corps": "Vous avez mon dossier, dites-moi ce qu'il manque."
+    },
+    {
+      "id": "TP-19",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "action_requise": "retrouver la demande du 12 et son etat",
+      "corps": "Je relance ma demande du 12, toujours sans reponse."
+    },
+    {
+      "id": "TP-22",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "technique",
+      "corps": "BONJOUR JAI UN PROBLEME AVEC LE LOGICIEL MERCI DE RAPPELER 06XXXXXXXX"
+    },
+    {
+      "id": "TP-23",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "technique",
+      "corps": "salam, lapp bloki f page dial stock, chnou ndir ?"
+    },
+    {
+      "id": "TP-24",
+      "sujet": "Demande de support",
+      "client": "commercant",
+      "attendu": "autre",
+      "piece_jointe": "capture_ecran.png"
+    }
+  ]
+}
