@@ -16,7 +16,7 @@ c'est ce que ce client utilise.
     FOURNISSEUR_PRINCIPAL=nom_court     le developpement
     FOURNISSEUR_SECOURS=autre_nom       la bascule, obligatoire
     FOURNISSEUR_MESURE=troisieme_nom    les mesures de mesure.py
-    FOURNISSEUR_GRANDE_FENETRE=nom      appele par son nom (TP2, TP1 bis)
+    FOURNISSEUR_GRAND_MODELE=nom        appele par son nom (cascade du TP11)
 
     LLM_NOM_COURT_URL=https://.../v1/chat/completions
     LLM_NOM_COURT_CLE=...
@@ -27,12 +27,16 @@ c'est ce que ce client utilise.
     LLM_NOM_COURT_MAX_TOKENS=2048       facultatif : plafond de la reponse
     LLM_NOM_COURT_OPTIONS={"cle": 1}    facultatif : champs JSON ajoutes a
                                         chaque requete de ce fournisseur
+    LLM_NOM_COURT_DELAI=300             facultatif : secondes d'attente d'une
+                                        reponse, 120 par defaut
 
 MAX_TOKENS compte chez Groq : sa limite par minute additionne le prompt et le
 plafond de reponse demande, et une requete sans plafond peut etre refusee.
 OPTIONS sert aux reglages propres a un fournisseur, par exemple
 {"thinking": {"type": "disabled"}} chez Z.ai, ou le raisonnement de GLM est
-actif par defaut et ralentit chaque appel.
+actif par defaut et ralentit chaque appel. DELAI sert a un modele lent : le
+serveur ne dit rien tant que la reponse n'est pas prete, et au-dela du delai
+l'appel echoue.
 
 Sans PRIX_CACHE, un token lu dans le cache est compte a la moitie du prix
 d'entree : c'est la remise que Groq affiche pour gpt-oss (documentation
@@ -64,6 +68,7 @@ import email.utils
 import json
 import os
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,19 +81,41 @@ from hors_ligne import Capture, Rejeu
 # --------------------------------------------------------------------------
 
 class ErreurFournisseur(RuntimeError):
-    """Le fournisseur a repondu une erreur qu'il ne sert a rien de reessayer."""
+    """Le fournisseur a repondu une erreur que reessayer tout de suite ne
+    changerait pas."""
 
 
-class QuotaDuFournisseur(ErreurFournisseur):
-    """Un fournisseur annonce un quota epuise pour `pause` secondes."""
+class FournisseurIndisponible(ErreurFournisseur):
+    """Le fournisseur ne sert pas pour l'instant : surcharge, quota, silence.
+    Plus tard, le meme appel peut passer. `pause` : les secondes pendant
+    lesquelles ne plus l'appeler, 0 s'il peut l'etre tout de suite."""
 
-    def __init__(self, message: str, pause: float) -> None:
+    def __init__(self, message: str, pause: float = 0.0) -> None:
         super().__init__(message)
         self.pause = pause
 
 
+class QuotaDuFournisseur(FournisseurIndisponible):
+    """Un fournisseur annonce un quota epuise pour `pause` secondes."""
+
+    def __init__(self, message: str, pause: float) -> None:
+        super().__init__(message, pause)
+
+
 class QuotaEpuise(RuntimeError):
-    """Tous les fournisseurs configures ont refuse. Passez en hors ligne."""
+    """Tous les fournisseurs configures ont refuse. Passez en hors ligne.
+    `derniere` garde l'erreur du dernier essai, pour qui veut savoir si
+    relancer plus tard peut servir (voir passagere)."""
+
+    def __init__(self, message: str, derniere: BaseException | None = None) -> None:
+        super().__init__(message)
+        self.derniere = derniere
+
+
+def passagere(erreur: BaseException | None) -> bool:
+    """Une erreur qu'un nouvel essai, plus tard, peut lever : surcharge, quota,
+    silence, reseau. Une cle refusee ou un modele inconnu, non."""
+    return isinstance(erreur, (FournisseurIndisponible, requests.RequestException))
 
 
 @dataclass
@@ -148,6 +175,7 @@ class Fournisseur:
     prix_cache: float = 0.0
     max_tokens: int | None = None
     options: dict = field(default_factory=dict)
+    delai: float = 120.0          # secondes d'attente d'une reponse
 
     @classmethod
     def depuis_env(cls, nom: str, sans_cle: bool = False) -> "Fournisseur":
@@ -159,6 +187,10 @@ class Fournisseur:
             raise ErreurFournisseur(
                 f"Fournisseur '{nom}' incomplet dans .env. Manque : "
                 f"{', '.join(manquants)}")
+        if not sans_cle and "<" in os.environ.get(p + "URL", ""):
+            raise ErreurFournisseur(
+                f"{p}URL attend encore une valeur entre < et >, par exemple "
+                f"l'identifiant de votre compte (annexe C, section 7).")
         entree = _prix(p + "PRIX_ENTREE") or 0.0
         cache = _prix(p + "PRIX_CACHE")
         plafond = os.environ.get(p + "MAX_TOKENS", "").strip()
@@ -169,6 +201,12 @@ class Fournisseur:
             raise ErreurFournisseur(f"{p}OPTIONS n'est pas du JSON valide : {e}")
         if not isinstance(options, dict):
             raise ErreurFournisseur(f"{p}OPTIONS doit etre un objet JSON {{...}}")
+        try:
+            delai = float(os.environ.get(p + "DELAI", "").strip() or 120)
+        except ValueError:
+            raise ErreurFournisseur(f"{p}DELAI doit etre un nombre de secondes")
+        if delai <= 0:
+            raise ErreurFournisseur(f"{p}DELAI doit etre positif")
         return cls(
             nom=nom,
             url=os.environ.get(p + "URL", ""),
@@ -179,6 +217,7 @@ class Fournisseur:
             prix_cache=entree / 2 if cache is None else cache,
             max_tokens=int(plafond) if plafond else None,
             options=options,
+            delai=delai,
         )
 
     def cout(self, entree: int, sortie: int, caches: int = 0) -> float:
@@ -187,6 +226,11 @@ class Fournisseur:
         return ((entree - caches) * self.prix_entree
                 + caches * self.prix_cache
                 + sortie * self.prix_sortie) / 1_000_000
+
+
+def masquer(texte: str) -> str:
+    """Remplace l'identifiant d'organisation d'un fournisseur par org_..."""
+    return re.sub(r"org_[A-Za-z0-9]+", "org_...", texte)
 
 
 def lire_retry_after(valeur: str | None) -> float | None:
@@ -221,6 +265,16 @@ class Client:
     # Au-dela, le fournisseur parle d'un quota, pas d'un encombrement : on
     # bascule au lieu d'attendre (§6.6.3).
     RETRY_AFTER_MAX = 60.0
+    # Un essai qui a dure plus que cela avant d'etre refuse (le 504 d'une
+    # passerelle au bout de quatre minutes) a deja coute toute l'attente : on
+    # passe au fournisseur suivant, et, s'il n'y en a pas, on ne retente
+    # qu'une fois. Un fournisseur muet jusqu'au bout de son delai, ou refuse
+    # ainsi, est saute pendant PAUSE_APRES_SILENCE secondes.
+    ATTENTE_LONGUE = 30.0
+    PAUSE_APRES_SILENCE = 300.0
+    # Les pauses sont communes a tous les clients d'un meme programme : un
+    # programme a plusieurs agents (le TP8) en construit un par agent.
+    _PAUSES: dict[str, float] = {}
 
     def __init__(self, fournisseur: str | None = None, hors_ligne: bool = False,
                  journal: Path | None = Path("journal/payload.jsonl"),
@@ -234,7 +288,7 @@ class Client:
         self.hors_ligne = hors_ligne or os.environ.get("MD26_HORS_LIGNE") == "1"
         self.simuler_429 = simuler_429
         self.journal = journal
-        self._en_pause: dict[str, float] = {}
+        self._en_pause = Client._PAUSES
         self._429_restants = 2 if simuler_429 else 0
         # Un fournisseur nomme par l'appelant, ou par mesure.py --fournisseur,
         # ne rejoue que ses propres captures (TP1 bis : A et B distincts).
@@ -280,26 +334,34 @@ class Client:
             return self._rejouer(messages, outils)
 
         derniere: Exception | None = None
-        # Un fournisseur qui vient de dire « quota epuise » n'est pas rappele
-        # a chaque requete : il est saute jusqu'a la fin de la pause, sauf
-        # s'il ne reste que lui.
+        # Un fournisseur en pause (quota epuise, ou muet jusqu'au bout de son
+        # delai) n'est pas rappele a chaque requete : il passe en dernier, et
+        # n'est appele que si tous les autres refusent.
         maintenant = time.time()
-        chaine = [f for f in self.chaine
-                  if self._en_pause.get(f.nom, 0) <= maintenant] or self.chaine
-        for fournisseur in chaine:
+        actifs = [f for f in self.chaine if self._en_pause.get(f.nom, 0) <= maintenant]
+        chaine = actifs + [f for f in self.chaine if f not in actifs]
+        for i, fournisseur in enumerate(chaine):
+            dernier = i == len(chaine) - 1
             try:
                 return self._appeler_un(fournisseur, messages, outils,
-                                        temperature, extra)
+                                        temperature, extra, dernier=dernier)
             except (ErreurFournisseur, requests.RequestException) as erreur:
                 derniere = erreur
-                if isinstance(erreur, QuotaDuFournisseur):
+                if isinstance(erreur, FournisseurIndisponible) and erreur.pause:
                     self._en_pause[fournisseur.nom] = time.time() + erreur.pause
-                if fournisseur is not chaine[-1]:
-                    print(f"  {fournisseur.nom} refuse ({erreur}). "
-                          f"Bascule sur le secours.")
+                elif isinstance(erreur, requests.Timeout):
+                    # Muet jusqu'au bout de son delai : rappele a chaque requete,
+                    # il ferait attendre tout ce delai avant le secours.
+                    self._en_pause[fournisseur.nom] = (time.time()
+                                                       + self.PAUSE_APRES_SILENCE)
+                if not dernier:
+                    suivant = chaine[i + 1]
+                    suite = ("Bascule sur le secours." if suivant in actifs else
+                             f"Rappel de {suivant.nom}, en pause : il ne reste que lui.")
+                    print(f"  {fournisseur.nom} refuse ({erreur}). {suite}")
         raise QuotaEpuise(
             f"Tous les fournisseurs ont refuse. Derniere erreur : {derniere}. "
-            f"Relancez plus tard, ou avec --hors-ligne.")
+            f"Relancez plus tard, ou avec --hors-ligne.", derniere)
 
     # ----------------------------------------------------------------------
 
@@ -328,7 +390,9 @@ class Client:
 
     def _appeler_un(self, f: Fournisseur, messages: list[dict],
                     outils: list[dict] | None, temperature: float,
-                    extra: dict) -> Reponse:
+                    extra: dict, dernier: bool = True) -> Reponse:
+        """Un fournisseur, avec reprise. `dernier` : aucun autre apres lui, et
+        un refus lent merite alors un second essai."""
         charge = {"model": f.modele, "messages": messages,
                   "temperature": temperature}
         if f.max_tokens:
@@ -342,13 +406,15 @@ class Client:
         debut = time.perf_counter()
         self._subir_429_simules(f.nom)
         attente = self.ATTENTE_INITIALE
+        lents = 0
 
         for essai in range(1, self.ESSAIS_MAX + 1):
+            debut_essai = time.perf_counter()
             r = requests.post(
                 f.url,
                 headers={"Authorization": f"Bearer {f.cle}",
                          "Content-Type": "application/json"},
-                json=charge, timeout=120)
+                json=charge, timeout=f.delai)
             statut = r.status_code
             try:
                 corps = r.json()
@@ -375,8 +441,15 @@ class Client:
                     raise QuotaDuFournisseur(
                         f"{statut} sur {f.nom}, Retry-After de {conseil:.0f}s : "
                         f"quota epuise pour l'instant", conseil)
+                duree = time.perf_counter() - debut_essai
+                if duree > self.ATTENTE_LONGUE:
+                    if not dernier or lents:
+                        raise FournisseurIndisponible(
+                            f"{statut} sur {f.nom}, venu apres {duree:.0f}s "
+                            f"d'attente", self.PAUSE_APRES_SILENCE)
+                    lents += 1
                 if essai == self.ESSAIS_MAX:
-                    raise ErreurFournisseur(f"{statut} apres {essai} essais")
+                    raise FournisseurIndisponible(f"{statut} apres {essai} essais")
                 pause = self._pause(attente, conseil)
                 print(f"  {statut} sur {f.nom}, attente {pause:.1f}s "
                       f"(essai {essai}/{self.ESSAIS_MAX})")
@@ -384,7 +457,9 @@ class Client:
                 attente *= 2
                 continue
 
-            raise ErreurFournisseur(f"{statut} : {str(corps)[:200]}")
+            # L'identifiant d'organisation du fournisseur (« org_... ») n'a
+            # rien a faire dans une raison d'echec qu'on recopie dans un rendu.
+            raise ErreurFournisseur(f"{statut} : {masquer(str(corps))[:200]}")
 
         raise ErreurFournisseur("essais epuises")
 

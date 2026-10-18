@@ -1,6 +1,9 @@
 """Verification de l'environnement, a lancer avant chaque TP.
 
     python verifier.py
+    python verifier.py --grand-modele     avant le TP11 : appelle aussi un
+                                          grand modele lent (DELAI de plus
+                                          de 120 s dans .env)
 
 Trente secondes qui evitent de decouvrir un probleme a la vingtieme minute
 d'un TP, sur une machine parmi trente, devant une salle qui attend.
@@ -12,7 +15,9 @@ Ce qui est verifie
     les paquets de requirements.txt sont installes
     .env existe, et n'est pas suivi par git
     deux fournisseurs sont configures, plus celui des mesures
-    un appel de test reussit chez chacun
+    le grand modele (TP11), sans bloquer
+    un appel de test reussit chez chacun, sauf un grand modele lent,
+    qui n'est appele qu'avec --grand-modele
     les reponses hors ligne sont disponibles
     le miroir de paquets de la salle repond, s'il est annonce
     la memoire vive de la machine, et ce qui passe dessus (§R3.2)
@@ -34,7 +39,8 @@ if os.name == "nt" and not os.environ.get("WT_SESSION"):
     VERT = ROUGE = JAUNE = GRIS = FIN = ""     # console Windows sans couleurs
 
 PYTHON_MINIMAL = (3, 10)      # mcp (TP4), langgraph (TP8), fastapi (TP3)
-PYTHON_MIROIR = {(3, 13), (3, 14)}   # les versions servies par le miroir de la salle
+PYTHON_MAXIMAL = (3, 13)      # Chroma, LangGraph, Phoenix : pas encore de paquets pour 3.14
+PYTHON_MIROIR = {(3, 13)}     # la version servie par le miroir de la salle
 MIROIR_SALLE = "http://192.168.137.1:8000"
 
 problemes: list[str] = []
@@ -63,14 +69,28 @@ def verifier_python() -> None:
     if v[:2] < PYTHON_MINIMAL:
         echec(f"Python {v.major}.{v.minor}, il en faut "
               f"{PYTHON_MINIMAL[0]}.{PYTHON_MINIMAL[1]} ou plus",
-              "Installez Python 3.13 ou 3.14, puis recreez l'environnement.")
+              "Installez Python 3.13, puis recreez l'environnement.")
+        return
+    if v[:2] > PYTHON_MAXIMAL:
+        echec(f"Python {v.major}.{v.minor} : le socle du module (Chroma, LangGraph, "
+              f"Phoenix) n'a pas encore de paquets pour cette version",
+              "Installez Python 3.13, puis recreez l'environnement.")
         return
     ok(f"Python {v.major}.{v.minor}.{v.micro}")
     if v[:2] not in PYTHON_MIROIR:
         alerte(f"Python {v.major}.{v.minor} : le miroir hors ligne de la salle "
-               f"ne porte que les paquets de Python 3.13 et 3.14",
+               f"ne porte que les paquets de Python 3.13",
                "Hors de la salle, tout fonctionne. En salle, sans internet, "
                "pip ne trouvera pas vos paquets.")
+    if sys.platform == "darwin":
+        import platform
+        macver = platform.mac_ver()[0]
+        majeur = int(macver.split(".")[0]) if macver.split(".")[0].isdigit() else 99
+        if majeur < 13:
+            alerte(f"macOS {macver} : les bibliotheques a partir du TP6 (Chroma, "
+                   f"par onnxruntime) demandent macOS 13 ou plus recent",
+                   "Les premiers blocs passent ; TP6, 8, 10 et 11 ne "
+                   "s'installeront pas sur cette machine.")
 
 
 def verifier_venv() -> None:
@@ -142,6 +162,15 @@ def verifier_env() -> None:
         alerte("git indisponible, impossible de verifier le suivi de .env")
 
 
+def _delai(nom: str) -> float:
+    """Le DELAI d'un fournisseur dans .env, en secondes ; 120 par defaut, comme
+    client_llm.py."""
+    try:
+        return float(os.environ.get(f"LLM_{nom.upper().replace('-', '_')}_DELAI") or 120)
+    except ValueError:
+        return 120.0
+
+
 def verifier_fournisseurs() -> None:
     try:
         from client_llm import Client, ErreurFournisseur, charger_env
@@ -182,16 +211,17 @@ def verifier_fournisseurs() -> None:
                    "Une bascule changera le comportement de l'agent au milieu "
                    "d'une execution. L'annexe C, section 7, donne un secours qui sert "
                    "le meme modele.")
-    # Le fournisseur de grande fenetre, appele par son nom au TP2 et pour le
-    # moteur A du TP1 bis. Il n'est pas exige avant le bloc 1.5.
-    fenetre = os.environ.get("FOURNISSEUR_GRANDE_FENETRE")
-    if not fenetre:
-        alerte("aucun FOURNISSEUR_GRANDE_FENETRE dans .env",
-               "Le TP2 et le moteur A du TP1 bis en ont besoin (annexe C, section 7). "
-               "Ajoutez-le avant le bloc 1.5.")
+    # Le grand modele de la cascade, appele par son nom au TP11 (bloc 11) :
+    # il previent sans bloquer.
+    grand = os.environ.get("FOURNISSEUR_GRAND_MODELE")
+    if not grand:
+        alerte("aucun FOURNISSEUR_GRAND_MODELE dans .env",
+               "La cascade du TP11 en a besoin, et refuse de demarrer sans lui "
+               "(annexe C, section 7). Ajoutez-le avant le bloc 11.")
+    plus_tard = {grand: "bloc 11"} if grand and grand not in (principal, secours, mesure) else {}
 
     noms = []
-    for nom in (principal, secours, mesure, fenetre):
+    for nom in (principal, secours, mesure, grand):
         if nom and nom not in noms:
             noms.append(nom)
 
@@ -200,13 +230,34 @@ def verifier_fournisseurs() -> None:
         if os.environ.get(variable, "").strip() in ("", "..."):
             remede = (f"Collez votre cle dans .env, a la ligne {variable}=, a la place "
                       f"des trois points. Le compte se cree en suivant l'annexe C, section 7.")
-            # La grande fenetre ne sert qu'a partir du bloc 1.5 : elle previent
-            # sans bloquer.
-            if nom == fenetre and nom not in (principal, secours, mesure):
-                alerte(f"{nom} : pas encore de cle, il en faut une avant le bloc 1.5", remede)
+            if nom in plus_tard:
+                alerte(f"{nom} : pas encore de cle, il en faut une avant le "
+                       f"{plus_tard[nom]}", remede)
             else:
                 echec(f"{nom} : pas de cle", remede)
             continue
+        # Un grand modele lent (glm sur l'essai de NVIDIA, DELAI de 300 s) ne
+        # fait pas attendre chaque verification pour un role qui ne sert qu'au
+        # TP11. On lit tout de meme ses lignes (URL, MODELE, OPTIONS, DELAI) ;
+        # --grand-modele lance son appel. Un grand modele rapide s'appelle
+        # comme les autres.
+        lent = nom == grand and nom not in (principal, secours, mesure) and _delai(nom) > 120
+        if lent and "--grand-modele" not in sys.argv[1:]:
+            try:
+                Client(fournisseur=nom, journal=None)
+            except ErreurFournisseur as erreur:
+                alerte(f"{nom} : {erreur}", "Corrigez la ligne dans .env avant le bloc 11.")
+                continue
+            ok(f"{nom} : cle presente, appel non teste (grand modele lent, jusqu'a "
+               f"{_delai(nom):.0f} s). Avant le TP11 : python verifier.py --grand-modele")
+            continue
+        if lent:
+            print(f"         {GRIS}{nom} : appel du grand modele, jusqu'a {_delai(nom):.0f} s...{FIN}")
+        elif _delai(nom) > 120:
+            # Z.ai, DELAI de 300 s : un service charge peut se taire plusieurs
+            # minutes, et un terminal muet passe pour un programme plante.
+            print(f"         {GRIS}{nom} : jusqu'a {_delai(nom):.0f} s par essai si le "
+                  f"service est charge...{FIN}")
         try:
             client = Client(fournisseur=nom, journal=None)
             reponse = client.appeler(
@@ -219,16 +270,26 @@ def verifier_fournisseurs() -> None:
                        f"LLM_{nom.upper().replace('-', '_')}_PRIX_SORTIE, mesure.py rendra "
                        "un cout de zero, et le bloc 11 sera impossible.")
         except ErreurFournisseur as erreur:
-            echec(f"{nom} : {erreur}", "Verifiez la cle et l'URL dans .env.")
+            # Un role qui ne sert que plus tard (le grand modele, au TP11)
+            # previent sans bloquer, meme quand il repond mal aujourd'hui.
+            (alerte if nom in plus_tard else echec)(
+                f"{nom} : {erreur}", "Verifiez la cle et l'URL dans .env.")
         except Exception as erreur:                          # noqa: BLE001
             texte = str(erreur)
             # Une cle refusee n'est pas une panne de reseau : le remede differe.
-            if any(code in texte for code in ("401", "403", "400 ")):
+            if re.search(r"\b40[13]\b|\b400 ", texte):
                 remede = (f"La cle est refusee. Recopiez-la dans .env, a la ligne "
                           f"{variable}=, sans espace. Reessayer sans la changer ne sert a rien.")
+            elif re.search(r"Read timed out|venu apres \d+s d'attente", texte):
+                # Joint, mais muet jusqu'au bout du delai : le reseau de la
+                # salle n'y est pour rien.
+                remede = ("Le fournisseur n'a rien repondu dans le delai : il est surcharge "
+                          "ou en panne. Relancez plus tard ; d'ici la, la section « Le mode "
+                          "hors ligne » de la feuille dit ce qui se fait sans reseau.")
             else:
                 remede = "Etes-vous sur le reseau MD26 ? Sinon, le fournisseur est peut-etre en panne."
-            echec(f"{nom} : {type(erreur).__name__} {texte[:200]}", remede)
+            (alerte if nom in plus_tard else echec)(
+                f"{nom} : {type(erreur).__name__} {texte[:200]}", remede)
 
 
 def verifier_hors_ligne() -> None:
@@ -272,7 +333,9 @@ def _memoire_go():
                             ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
             etat = Etat()
             etat.dwLength = ctypes.sizeof(Etat)
-            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(etat))
+            ok = ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(etat))
+            if not ok or not etat.ullTotalPhys:
+                return None, None
             return etat.ullTotalPhys / 2**30, etat.ullAvailPhys / 2**30
         info = {}
         with open("/proc/meminfo", encoding="utf-8") as f:

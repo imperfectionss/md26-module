@@ -4,7 +4,8 @@
 # script venu d'ailleurs, et celui-ci est court. Il fait six choses, dans
 # l'ordre, et il s'arrete a la premiere qui echoue en disant pourquoi :
 #
-#   1. Python 3.13, s'il n'y a pas deja un Python 3.10 ou plus
+#   1. Python 3.13, s'il n'y a pas deja un Python de 3.10 a 3.13 (pas 3.14 :
+#      Chroma, LangGraph et Phoenix n'ont pas encore de paquets pour elle)
 #   2. git, s'il n'est pas deja la
 #   3. votre copie du depot, dans le dossier md26 de votre repertoire
 #   4. l'environnement virtuel, et ses bibliotheques
@@ -60,7 +61,7 @@ function Prendre($chemin_miroir, $url_internet, $fichier) {
 # ---------------------------------------------------------------- 1. Python
 Etape "1/6  Python"
 $Python = $null
-foreach ($essai in @("3.14", "3.13", "3.12", "3.11", "3.10")) {
+foreach ($essai in @("3.13", "3.12", "3.11", "3.10")) {
     try {
         $p = & py "-$essai" -c "import sys; print(sys.executable)" 2>$null
         if ($LASTEXITCODE -eq 0 -and $p) { $Python = $p.Trim(); break }

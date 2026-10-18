@@ -26,6 +26,12 @@ Les options du banc
     --seuil 0.6          sort en erreur sous ce taux, ou si une execution a
                          subi un incident : c'est la commande de la CI
 
+Trois executions de suite qui ont attendu le fournisseur pour rien (plus de
+30 s chacune) arretent la mesure ; Ctrl+C aussi, a la fin de l'appel en cours.
+La mesure garde ce qui est fait et compte les executions non lancees ; avec
+--sortie, elle l'ecrit a cote, dans FICHIER.incomplete.json, sans toucher a une
+mesure complete deja la. Une mesure incomplete sort avec le code 1.
+
 Toute autre option est transmise telle quelle a construire(). C'est ce qui
 permet aux feuilles de TP d'ecrire :
 
@@ -111,10 +117,21 @@ ECRITURE_ARABE = re.compile(r"[؀-ۿ]")
 LANGUES_ARABES = {"darija-ar", "msa"}
 
 
+# Les modeles ecrivent souvent la typographie francaise : gpt-oss rend
+# « 7 jours » avec une espace fine insecable, et « d'un » avec une apostrophe
+# courbe. Les mots-cles et les pages, eux, sont tapes au clavier.
+TYPOGRAPHIE = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'",
+                             "\u2010": "-", "\u2011": "-"})
+
+
 def normaliser(texte: str) -> str:
-    """Minuscules, sans accents ni voyelles arabes, chiffres occidentaux."""
-    texte = unicodedata.normalize("NFD", texte.lower().translate(CHIFFRES_ARABES))
-    return "".join(c for c in texte if unicodedata.category(c) != "Mn")
+    """Minuscules, sans accents ni voyelles arabes, chiffres occidentaux,
+    apostrophes et traits d'union droits, et chaque suite d'espaces,
+    insecables comprises, ramenee a une espace."""
+    texte = texte.lower().translate(CHIFFRES_ARABES).translate(TYPOGRAPHIE)
+    texte = unicodedata.normalize("NFD", texte)
+    texte = "".join(c for c in texte if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", texte)
 
 
 def pages(sources) -> list:
@@ -203,6 +220,13 @@ class Essai:
     transmission_attendue: bool = False
     actions_non_sures: int = 0
     incident: str = ""
+    # Le TP11 : « petit » ou « grand » quand l'agent est une cascade ou son
+    # temoin au hasard, et ce que le grand modele a coute seul, pour recalculer
+    # le cout a un autre ecart de prix.
+    cascade: str = ""
+    cout_grand: float = 0.0
+    tokens_grand_entree: int = 0
+    tokens_grand_sortie: int = 0
 
 
 def wilson(succes: float, n: int, z: float = 1.96) -> tuple[float, float]:
@@ -219,6 +243,10 @@ def wilson(succes: float, n: int, z: float = 1.96) -> tuple[float, float]:
 class Resultat:
     essais: list[Essai] = field(default_factory=list)
     repetitions: int = 1
+    # Les executions jamais lancees : la mesure s'est arretee avant (un
+    # fournisseur qui cale, ou Ctrl+C), et la raison de l'arret.
+    non_lancees: int = 0
+    arret: str = ""
 
     @property
     def valides(self) -> list[Essai]:
@@ -316,6 +344,19 @@ class Resultat:
     def actions_non_sures(self) -> int:
         return sum(e.actions_non_sures for e in self.valides)
 
+    def grand_modele(self) -> dict | None:
+        """La part des executions passees au grand modele, et ce qu'il a
+        coute, quand l'agent est une cascade (TP11). None sinon."""
+        routees = [e for e in self.valides if e.cascade]
+        if not routees:
+            return None
+        grand = [e for e in routees if e.cascade == "grand"]
+        return {"executions": len(routees), "au_grand": len(grand),
+                "part": round(len(grand) / len(routees), 4),
+                "cout_grand": round(sum(e.cout_grand for e in routees), 6),
+                "tokens_grand_entree": sum(e.tokens_grand_entree for e in routees),
+                "tokens_grand_sortie": sum(e.tokens_grand_sortie for e in routees)}
+
     def arena(self) -> dict:
         """Les trois chiffres de l'Arena du module (chapitre 13) : taux verifie,
         cout par resolution, actions non sures, transmissions manquees comprises."""
@@ -394,15 +435,20 @@ def lancer(agent, tache: dict) -> dict:
         return agent(tache["question"])
 
     cumul = {"tokens_entree": 0, "tokens_sortie": 0, "tokens_caches": 0,
-             "cout": 0.0, "tours": 0, "actions_non_sures": 0}
+             "cout": 0.0, "tours": 0, "actions_non_sures": 0,
+             "cout_grand": 0.0, "tokens_grand_entree": 0, "tokens_grand_sortie": 0}
     sortie: dict = {}
+    cascade = ""
     for numero, session in enumerate(tache["sessions"], 1):
         messages = session if isinstance(session, list) else [session]
         for message in messages:
             sortie = agent(message, session=numero)
             for cle in cumul:
                 cumul[cle] += sortie.get(cle, 0) or 0
-    return {**sortie, **cumul}
+            # Le TP11 : l'execution passe au grand si un seul message y est passe.
+            if sortie.get("cascade"):
+                cascade = "grand" if "grand" in (cascade, sortie["cascade"]) else "petit"
+    return {**sortie, **cumul, "cascade": cascade}
 
 
 def classer(erreur: Exception) -> str:
@@ -412,11 +458,33 @@ def classer(erreur: Exception) -> str:
     return ""
 
 
+# Trois executions de suite qui ont attendu le fournisseur pour rien : il
+# cale, et chaque execution suivante attendrait encore tout son delai (300 s
+# chez Z.ai). La mesure s'arrete et garde ce qui est fait. Un refus rapide (une
+# cle refusee, un filtre de contenu) ne coute rien a attendre : il est exclu,
+# et la mesure continue.
+ARRET_APRES = 3
+ATTENTE_LONGUE = 30.0      # comme client_llm.py
+
+
 def executer(module, options: dict, taches: list[dict], repetitions: int,
              verbeux: bool) -> Resultat:
     resultat = Resultat(repetitions=repetitions)
+    try:
+        _executer(resultat, module, options, taches, repetitions, verbeux)
+    except KeyboardInterrupt:
+        # Ctrl+C garde les executions deja faites, au lieu de tout perdre.
+        resultat.non_lancees = len(taches) * repetitions - len(resultat.essais)
+        resultat.arret = "mesure interrompue (Ctrl+C)"
+        print("\n  Interrompue : la mesure garde ce qui est fait.", file=sys.stderr)
+    return resultat
+
+
+def _executer(resultat: Resultat, module, options: dict, taches: list[dict],
+              repetitions: int, verbeux: bool) -> None:
     total = len(taches) * repetitions
     fait = 0
+    de_suite = 0
     agent = None
 
     if any("sessions" in t for t in taches):
@@ -447,7 +515,10 @@ def executer(module, options: dict, taches: list[dict], repetitions: int,
                 # epuise, lui, n'est pas un echec de l'agent.
                 sortie, reussi = {}, False
                 incident = classer(erreur)
-                raison = f"exception : {type(erreur).__name__} {erreur}"
+                # client_llm garde l'erreur du fournisseur sous son enveloppe :
+                # c'est elle qui dit quoi faire (un 401, un delai depasse).
+                cause = getattr(erreur, "derniere", None) or erreur
+                raison = f"exception : {type(erreur).__name__} {cause}"
             latence = time.perf_counter() - debut
             if not hasattr(agent, "reinitialiser"):
                 agent = None
@@ -469,6 +540,10 @@ def executer(module, options: dict, taches: list[dict], repetitions: int,
                     tache.get("attendu", {}).get("transmission")),
                 actions_non_sures=int(sortie.get("actions_non_sures", 0) or 0),
                 incident=incident,
+                cascade=str(sortie.get("cascade") or ""),
+                cout_grand=float(sortie.get("cout_grand", 0.0) or 0.0),
+                tokens_grand_entree=int(sortie.get("tokens_grand_entree", 0) or 0),
+                tokens_grand_sortie=int(sortie.get("tokens_grand_sortie", 0) or 0),
             ))
 
             fait += 1
@@ -478,7 +553,18 @@ def executer(module, options: dict, taches: list[dict], repetitions: int,
                 print(f"  [{fait:>3}/{total}] {tache['id']:<12} {marque:<8}"
                       f"  {latence:5.1f}s", file=sys.stderr)
 
-    return resultat
+            # Le rejeu manque une capture tache par tache, et un refus rapide
+            # ne coute rien : seul un fournisseur qui fait attendre pour rien
+            # arrete la mesure.
+            cale = incident in ("fournisseur", "reseau") and latence > ATTENTE_LONGUE
+            de_suite = de_suite + 1 if cale else 0
+            if de_suite >= ARRET_APRES and fait < total:
+                resultat.non_lancees = total - fait
+                resultat.arret = (f"{ARRET_APRES} executions de suite ont attendu "
+                                  f"le fournisseur pour rien")
+                print(f"\n  {resultat.arret} : la mesure s'arrete la, "
+                      f"{resultat.non_lancees} executions non lancees.", file=sys.stderr)
+                return
 
 
 # --------------------------------------------------------------------------
@@ -526,6 +612,14 @@ def afficher(resultat: Resultat, nom_agent: str, nom_taches: str,
               f" ({caches / envoyes * 100:.0f} %)")
     if resultat.actions_non_sures():
         print(f"  actions non sures    {resultat.actions_non_sures()}")
+    grand = resultat.grand_modele()
+    if grand:
+        # Le TP11 : la part envoyee au grand, puis ce qu'il a coute seul.
+        print(f"  au grand modele      {grand['au_grand']}/{grand['executions']}"
+              f"   ({grand['part'] * 100:.0f} % des executions)")
+        print(f"  dont grand modele    {grand['cout_grand']:.4f} $"
+              f"   {grand['tokens_grand_entree']} tokens en entree, "
+              f"{grand['tokens_grand_sortie']} en sortie")
     print()
 
     langues = resultat.par_langue()
@@ -552,14 +646,25 @@ def afficher(resultat: Resultat, nom_agent: str, nom_taches: str,
         print(f"  ATTENTION : {avertissement}")
         print()
 
-    if resultat.incidents:
-        genres = sorted({e.incident for e in resultat.incidents})
-        print(f"  {len(resultat.incidents)} executions exclues "
-              f"({', '.join(genres)}) : elles ne mesurent pas l'agent.")
-        print(f"    {resultat.incidents[0].tache:<12} "
-              f"{resultat.incidents[0].raison[:90]}")
-        print("  La mesure est incomplete : relancez-la, et dites-le dans "
-              "RENDU.md.")
+    if resultat.incidents or resultat.non_lancees:
+        genres = {e.incident for e in resultat.incidents}
+        if resultat.incidents:
+            print(f"  {len(resultat.incidents)} executions exclues "
+                  f"({', '.join(sorted(genres))}) : elles ne mesurent pas l'agent.")
+            # La derniere erreur du fournisseur s'il y en a une : un 401 vient
+            # de la cle, un delai depasse ou un 503 du fournisseur.
+            du_fournisseur = [e for e in resultat.incidents if e.incident != "rejeu"]
+            dernier = (du_fournisseur or resultat.incidents)[-1]
+            print(f"    {dernier.tache:<12} {dernier.raison[:160]}")
+        if resultat.non_lancees:
+            print(f"  {resultat.non_lancees} executions non lancees : "
+                  f"{resultat.arret}.")
+        if "rejeu" in genres:
+            print("  Le rejeu ne connait que les appels deja captures : un prompt ou "
+                  "un outil modifie\n  se capture de nouveau, en ligne, avec --capturer.")
+        if genres - {"rejeu"} or resultat.non_lancees:
+            print("  La mesure est incomplete : relancez-la plus tard, et dites-le "
+                  "dans RENDU.md.")
         print()
 
     echecs = resultat.echecs()
@@ -594,10 +699,13 @@ def en_json(resultat: Resultat, nom_agent: str, options: dict,
         "tokens_entree": sum(e.tokens_entree for e in resultat.valides),
         "tokens_caches": sum(e.tokens_caches for e in resultat.valides),
         "actions_non_sures": resultat.actions_non_sures(),
+        "grand_modele": resultat.grand_modele(),
         "arena": resultat.arena(),
         "avertissements": resultat.avertissements(),
         "par_langue": resultat.par_langue(),
         "incidents": len(resultat.incidents),
+        "non_lancees": resultat.non_lancees,
+        "arret": resultat.arret,
         "essais": [vars(e) for e in resultat.essais],
     }
 
@@ -740,17 +848,22 @@ def main() -> int:
 
     resultat = executer(module, options, taches, args.repetitions,
                         verbeux=not args.silencieux)
+    incomplete = bool(resultat.incidents or resultat.non_lancees)
 
     # --sortie existe pour Windows : « --json > fichier » dans PowerShell 5.1
     # ecrit en UTF-16, et json.load refuse ensuite de relire le fichier.
     if args.sortie is not None:
-        args.sortie.parent.mkdir(parents=True, exist_ok=True)
-        args.sortie.write_text(
+        # Une mesure arretee en route ne remplace pas une mesure complete
+        # deja ecrite : elle va a cote.
+        cible = (args.sortie.with_name(f"{args.sortie.stem}.incomplete{args.sortie.suffix}")
+                 if resultat.non_lancees else args.sortie)
+        cible.parent.mkdir(parents=True, exist_ok=True)
+        cible.write_text(
             json.dumps(en_json(resultat, args.agent, options, origine),
                        ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8")
         afficher(resultat, args.agent, args.taches.name, origine)
-        print(f"  mesure ecrite dans {args.sortie}", file=sys.stderr)
+        print(f"  mesure ecrite dans {cible}", file=sys.stderr)
     elif args.json:
         print(json.dumps(en_json(resultat, args.agent, options, origine),
                          ensure_ascii=False, indent=2))
@@ -759,9 +872,10 @@ def main() -> int:
 
     if args.seuil is not None:
         taux = resultat.taux_resolution()
-        if resultat.incidents:
+        if resultat.incidents or resultat.non_lancees:
             print(f"  ECHEC : {len(resultat.incidents)} executions sans reponse "
-                  f"du fournisseur ou du rejeu.", file=sys.stderr)
+                  f"du fournisseur ou du rejeu, {resultat.non_lancees} non "
+                  f"lancees.", file=sys.stderr)
             return 1
         if taux < args.seuil:
             print(f"  ECHEC : taux {taux * 100:.1f} % sous le seuil "
@@ -769,7 +883,9 @@ def main() -> int:
             return 1
         print(f"  ok : taux {taux * 100:.1f} %, seuil {args.seuil * 100:.0f} %.",
               file=sys.stderr)
-    return 0
+    # Code 1 pour une mesure incomplete : un script, ou la capture du tableau
+    # de bord, ne la prend pas pour une mesure entiere.
+    return 1 if incomplete else 0
 
 
 if __name__ == "__main__":

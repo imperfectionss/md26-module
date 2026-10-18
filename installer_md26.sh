@@ -4,7 +4,8 @@
 # Lisez ce script avant de le lancer, comme tout script venu d'ailleurs. Il
 # fait cinq choses, dans l'ordre, et s'arrete a la premiere qui echoue :
 #
-#   1. verifie Python 3.10 ou plus, et git
+#   1. verifie Python de 3.10 a 3.13 (pas 3.14 : Chroma, LangGraph et Phoenix
+#      n'ont pas encore de paquets pour elle), et git
 #   2. clone votre copie du depot dans ~/md26
 #   3. cree l'environnement virtuel et installe ses bibliotheques
 #   4. cree votre fichier .env
@@ -28,14 +29,14 @@ if curl -s -m 3 -o /dev/null "$MIROIR/manifeste.json"; then EN_SALLE=1; fi
 
 etape "1/5  Python et git"
 PY=""
-for c in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
-  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+for c in python3.13 python3.12 python3.11 python3.10 python3; do
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(not ((3, 10) <= sys.version_info[:2] <= (3, 13)))'; then
     PY="$c"; break
   fi
 done
 if [ -z "$PY" ]; then
   if [ "$(uname)" = "Darwin" ]; then
-    printf '   Python 3.10 ou plus est absent. Installez-le, puis relancez :\n'
+    printf '   Python de 3.10 a 3.13 est absent. Installez-le, puis relancez :\n'
     if [ "$EN_SALLE" = 1 ]; then
       printf '   curl -O %s/installeurs/macos/python-3.13.15-macos11.pkg\n' "$MIROIR"
       printf '   sudo installer -pkg python-3.13.15-macos11.pkg -target /\n'
@@ -43,7 +44,7 @@ if [ -z "$PY" ]; then
       printf '   https://www.python.org/downloads/macos/\n'
     fi
   else
-    printf '   Python 3.10 ou plus est absent : sudo apt install python3 python3-venv\n'
+    printf '   Python de 3.10 a 3.13 est absent : sudo apt install python3 python3-venv\n'
   fi
   exit 1
 fi
