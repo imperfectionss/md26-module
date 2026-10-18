@@ -79,7 +79,11 @@ Le format d'une tache, une par ligne dans un fichier .jsonl
      "interdits": ["je ne sais pas"]}
 
     Un mot-cle peut etre une liste de variantes : une seule suffit. C'est ce
-    qui permet de verifier une reponse en darija.
+    qui permet de verifier une reponse en darija. Un mot-cle, comme un
+    interdit, se cherche au debut d'un mot, sans accents ni majuscules :
+    « lien » ne se trouve pas dans « client », ni « 7 jours » dans
+    « 17 jours ». La fin reste libre (« envoy » trouve « envoye ») ; un mot de
+    trois lettres ou moins se cherche entier (« pro », pas « probleme »).
     "attendu": {"transmission": true}   la bonne reponse est de passer la main
     "attendu": {"outils": ["chercher_documentation", "lire_page"]}
                                         ces outils, dans cet ordre
@@ -93,6 +97,7 @@ taux d'accord entre les deux.
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib
 import inspect
 import json
@@ -134,6 +139,35 @@ def normaliser(texte: str) -> str:
     return re.sub(r"\s+", " ", texte)
 
 
+@functools.lru_cache(maxsize=4096)
+def motif(mot: str) -> re.Pattern:
+    """Le motif d'un mot-cle deja normalise, cherche dans une reponse
+    normalisee. Il commence un mot : « lien » ne se trouve pas dans
+    « client », ni « role » dans « controle », ni « 7 jours » dans
+    « 17 jours ». En darija en lettres latines, l'article colle au mot :
+    « mas2oul » se trouve dans « lmas2oul ». La fin reste libre, pour les
+    racines (« envoy » trouve « envoye »), sauf pour un nombre (« 500 » ne se
+    trouve pas dans « 5000 ») et pour un mot de trois lettres ou moins, qui se
+    cherche entier (« pro » ne se trouve pas dans « probleme »). Un mot en
+    ecriture arabe n'a pas de debut impose : l'arabe colle ses prefixes."""
+    debut = fin = ""
+    if mot[:1].isdigit():
+        debut = r"(?<![0-9])"
+    elif re.match(r"[a-z]", mot):
+        debut = r"(?:(?<![a-z0-9])|(?<=(?<![a-z0-9])l))"
+    if mot[-1:].isdigit():
+        fin = r"(?![0-9])"
+    elif re.fullmatch(r"[a-z]{1,3}", mot):
+        fin = r"(?![a-z0-9])"
+    return re.compile(debut + re.escape(mot) + fin)
+
+
+def contient(reponse: str, mot: str) -> bool:
+    """Le mot-cle, ou l'interdit, est-il dans la reponse normalisee ?"""
+    mot = normaliser(mot).strip()
+    return bool(mot) and bool(motif(mot).search(reponse))
+
+
 def pages(sources) -> list:
     """Accepte [7, 8] ou [{"page": 7, "extrait": "..."}]."""
     rendu = []
@@ -163,13 +197,13 @@ def verifier(sortie: dict, tache: dict) -> tuple[bool, str]:
         return False, "transmission evitable"
 
     for interdit in tache.get("interdits", []):
-        if normaliser(interdit) in reponse:
+        if contient(reponse, interdit):
             return False, f"contient l'interdit : {interdit}"
 
     manquants = []
     for mot in attendu.get("mots_cles", []):
         variantes = mot if isinstance(mot, list) else [mot]
-        if not any(normaliser(v) in reponse for v in variantes):
+        if not any(contient(reponse, v) for v in variantes):
             manquants.append(" | ".join(variantes))
     if manquants:
         return False, f"mots-cles absents : {', '.join(manquants)}"
