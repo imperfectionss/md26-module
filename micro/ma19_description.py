@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """MA-19 · Reecrivez la description (bloc 3).
 
-Quatre outils, un par recherche possible. Leurs noms ne disent rien :
-recherche_a, recherche_b, recherche_c. Seule la description dit a quoi chacun
-sert, et celle de recherche_a est vague expres. Deux demandes de client passent
+Quatre outils : trois cherchent, un escalade. Les noms des recherches ne disent
+rien : recherche_a, recherche_b, recherche_c. Seule la description dit a quoi
+chacun sert, et celle de recherche_a est vague expres. Deux demandes passent
 a l'agent ; pour chacune, le script affiche le premier outil que le modele
 demande, et ses arguments. Rien n'est execute.
 
